@@ -1,0 +1,67 @@
+From 5b6755c1e50602fdd44ba8098a51259ed32cfa9b Mon Sep 17 00:00:00 2001
+From: Rain Wang <rain_wang@jabil.com>
+Date: Sat, 26 Oct 2019 15:56:54 +0800
+Subject: [PATCH] lm75: add lm75b detection
+
+The National Semiconductor LM75B is very similar as the
+LM75A, but it has no ID byte register 7, and unused registers
+return 0xff rather than the last read value like LM75A.
+
+Signed-off-by: Rain Wang <rain_wang@jabil.com>
+---
+ drivers/hwmon/lm75.c | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/hwmon/lm75.c b/drivers/hwmon/lm75.c
+index 5e6392294c03..a718f9eb4d72 100644
+--- a/drivers/hwmon/lm75.c
++++ b/drivers/hwmon/lm75.c
+@@ -760,6 +760,7 @@ static int lm75_detect(struct i2c_client *new_client,
+ 	int i;
+ 	int conf, hyst, os;
+ 	bool is_lm75a = 0;
++	bool is_lm75b = 0;
+ 
+ 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA |
+ 				     I2C_FUNC_SMBUS_WORD_DATA))
+@@ -780,8 +781,12 @@ static int lm75_detect(struct i2c_client *new_client,
+ 	 * register 7, and unused registers return 0xff rather than the
+ 	 * last read value.
+ 	 *
++	 * The National Semiconductor LM75B is very similar as the
++	 * LM75A, but it has no ID byte register 7, and unused registers 
++	 * return 0xff rather than the last read value like LM75A.
++	 *
+ 	 * Note that this function only detects the original National
+-	 * Semiconductor LM75 and the LM75A. Clones from other vendors
++	 * Semiconductor LM75 and the LM75A/B. Clones from other vendors
+ 	 * aren't detected, on purpose, because they are typically never
+ 	 * found on PC hardware. They are found on embedded designs where
+ 	 * they can be instantiated explicitly so detection is not needed.
+@@ -806,6 +811,13 @@ static int lm75_detect(struct i2c_client *new_client,
+ 		is_lm75a = 1;
+ 		hyst = i2c_smbus_read_byte_data(new_client, 2);
+ 		os = i2c_smbus_read_byte_data(new_client, 3);
++	} else if (i2c_smbus_read_byte_data(new_client, 4) == 0xff
++		 && i2c_smbus_read_byte_data(new_client, 5) == 0xff
++		 && i2c_smbus_read_byte_data(new_client, 6) == 0xff) {
++		/* LM75B detection */
++		is_lm75b = 1;
++		hyst = i2c_smbus_read_byte_data(new_client, 2);
++		os = i2c_smbus_read_byte_data(new_client, 3);
+ 	} else { /* Traditional style LM75 detection */
+ 		/* Unused addresses */
+ 		hyst = i2c_smbus_read_byte_data(new_client, 2);
+@@ -839,7 +851,8 @@ static int lm75_detect(struct i2c_client *new_client,
+ 			return -ENODEV;
+ 	}
+ 
+-	strlcpy(info->type, is_lm75a ? "lm75a" : "lm75", I2C_NAME_SIZE);
++	strlcpy(info->type, is_lm75a ? 
++		"lm75a" : (is_lm75b ? "lm75b" : "lm75"), I2C_NAME_SIZE);
+ 
+ 	return 0;
+ }
+-- 
+2.21.0
+
